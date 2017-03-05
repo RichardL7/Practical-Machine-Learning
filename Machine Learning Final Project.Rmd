@@ -1,0 +1,279 @@
+---
+title: "Machine Learning Project"
+author: "Richard Lai"
+date: "March 3, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+## Table of Contents:
+```{}
+A. Background
+B. Dataset Description
+C. Instruction of submission for this project
+D. Read the URL and Download the Datasets
+E. Exploratory the Data
+F. Correlation Analysis
+G. Random Forest Model
+H. Decision Tree Model
+I. Generalized Boosted Model (GBM)
+J. Summary
+K. The 20 quiz predict results
+```
+
+## A. Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information is available from the website here: <http://groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+
+## B. Dataset
+
+The training data for this project are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+The data for this project come from <http://groupware.les.inf.puc-rio.br/har.> 
+
+Full source reference:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. "Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13)". Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+Note: A special thank you to the above authors for such generous in allowing their data to be used for this kind of assignment.
+
+The model layout
+
+Our outcome for this data set is "classe" variable in the training set. A factor variable with 5 levels. Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions: 
+```{}
+* Exactly according to the specification [Class A] 
+* Throwing the elbows to the front [Class B] 
+* Lifting the dumbbell only halfway [Class C] 
+* Lowering the dumbbell only halfway [Class D]
+* Throwing the hips to the front [Class E]
+```
+
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. 
+
+The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg)."
+
+
+## C. Instruction of submission for this project
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. We use any of the other variables to predict with. A report output describing how to built the model, how we used cross validation, what we think the expected out of sample error is, and why we made the choices we did. We will also use this prediction model to predict 20 different test cases.
+
+Peer Review
+
+The submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-). 
+
+Course Project Prediction Quiz Portion
+
+Apply the machine learning algorithm to the 20 test cases available in the test data above and submit your predictions in appropriate format to the Course Project Prediction Quiz for automated grading.
+
+
+
+## D. Read the URL and Download the Datasets
+
+```{r}
+UrlDwnload_Train <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+UrlDwnload_Test  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+```
+
+```{r}
+training <- read.csv(url(UrlDwnload_Train))
+testing  <- read.csv(url(UrlDwnload_Test))
+```
+
+## E. Exploratory Data Analysis
+
+Reproducibility
+
+Installing the different packages, loading libraries, and setting the seed for working environment:
+```{r}
+library(knitr)
+library(caret)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+
+# setting the overall seed for reproduceability
+set.seed(12345)
+
+
+# Cross Validation 
+
+# Create partition of Train (75%) and Test (25%) dataset
+SetupTrain  <- createDataPartition(training$classe, p=0.75, list=FALSE)
+TraingSet <- training[SetupTrain, ]
+TestgSet  <- training[-SetupTrain, ]
+```
+Train Set
+
+```{r}
+dim(TraingSet)
+```
+Test Set
+
+```{r}
+dim(TestgSet)
+```
+
+Remove any variables with zero value for Train and Test Set
+
+```{r, echo=FALSE}
+RemoveZero <- nearZeroVar(TraingSet)
+TraingSet <- TraingSet[, -RemoveZero]
+TestgSet  <- TestgSet[, -RemoveZero]
+```
+```{r}
+dim(TraingSet)
+```
+
+```{r}
+dim(TestgSet)
+```
+Remove any variables of NA for Train and Test Set
+
+```{r, echo=FALSE}
+RemoveNA    <- sapply(TraingSet, function(x) mean(is.na(x))) > 0.95
+TraingSet <- TraingSet[, RemoveNA==FALSE]
+TestgSet  <- TestgSet[, RemoveNA==FALSE]
+```
+```{r}
+dim(TraingSet)
+```
+
+```{r}
+dim(TestgSet)
+```
+
+
+Remove identification variables for columns 1 to 5
+```{r, echo=FALSE}
+TraingSet <- TraingSet[, -(1:5)]
+TestgSet  <- TestgSet[, -(1:5)]
+```
+Train Set
+```{r}
+dim(TraingSet)
+```
+Test Set
+```{r}
+dim(TestgSet)
+```
+
+## F. Correlation Analysis
+
+```{r}
+qplot(classe, col=classe, data=TraingSet, main="Plot of Variable levels classe with the Training Set dataset", xlab="classe", ylab="Frequency")
+```
+
+```{r, echo=FALSE}
+qplot(accel_arm_x, accel_arm_y, col=classe, main="Plot of Variable Levels Classe with the Training Set Data", ylab="Frequency", data=TraingSet)
+```
+
+## G. Random Forest Model
+    Model Fit
+```{r}
+set.seed(12345)
+contrlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+ModelRF <- train(classe ~ ., data=TraingSet, method="rf", trControl=contrlRF)
+ModelRF$finalModel
+```
+
+Prediction on Test Set
+```{r}
+PredictRF <- predict(ModelRF, newdata=TestgSet)
+confRF <- confusionMatrix(PredictRF, TestgSet$classe)
+confRF
+```
+
+Plot Matrix Results
+```{r}
+plot(confRF$table, col = confRF$byClass, 
+     main = paste("Random Forest Accuracy =",
+                  round(confRF$overall['Accuracy'], 4)))
+```
+
+
+## H. Decision Tree Model
+    Model Fit
+```{r}
+set.seed(12345)
+ModelDT <- rpart(classe ~ ., data=TraingSet, method="class")
+fancyRpartPlot(ModelDT)
+```
+
+Prediction on Test Set
+```{r}
+PredictDT <- predict(ModelDT, newdata=TestgSet, type="class")
+confDT <- confusionMatrix(PredictDT, TestgSet$classe)
+confDT
+```
+
+Plot Matrix Results
+```{r}
+plot(confDT$table, col = confDT$byClass, 
+     main = paste("Decision Tree Accuracy =",
+                  round(confDT$overall['Accuracy'], 4)))
+```
+
+
+## I. Generalized Boosted Model (GBM)
+    Model fit
+```{r}
+set.seed(12345)
+contrlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+ModelGBM  <- train(classe ~ ., data=TraingSet, method = "gbm",
+                    trControl = contrlGBM, verbose = FALSE)
+ModelGBM$finalModel
+```
+
+Prediction on Test Set
+```{r}
+predictGBM <- predict(ModelGBM, newdata=TestgSet)
+confGBM <- confusionMatrix(predictGBM, TestgSet$classe)
+confGBM
+```
+
+Plot Matrix Results
+```{r}
+plot(confGBM$table, col = confGBM$byClass, 
+     main = paste("GBM Accuracy =", round(confGBM$overall['Accuracy'], 4)))
+```
+
+## J. Summary
+## The accuracy of the 3 regression models above as following:
+```{}
+                **Accuracy**     **Out-of-Sample Error**
+a.Random Forest:   0.9965               0.0035
+b.Decision Tree:   0.793                0.207
+c.GBM:             0.9876               0.0124
+```
+
+In summary, the accuracy for Random Forest model was 0.9965 (95% CI: (0.9945, 0.998)) compared to 0.793 (95% CI:(0.7814, 0.8043)) for Decision Tree model. Even though, Generalized Boosted Model (GBM) was 0.9876 (95% CI: (0.9841, 0.9905)) in which closly match to Random Forest accuracy, but the Random Forest algorithm performed better results than other 2 models. Therefore, we selected Random Forest Model with 99% validation and 0.0035 out-of-sample error for our test data set to comprises the 20 cases. 
+
+
+## K. Using the Random Forest algorithm model to predict the 20 quiz results (testing dataset) as shown below:
+
+
+```{r}
+PredictTestng <- predict(ModelRF, newdata=testing)
+PredictTestng
+```
+
+
